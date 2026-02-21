@@ -106,6 +106,21 @@ The AI is prompted to generate FDM-friendly geometry:
 
 The slicer adds a 5mm brim automatically to anchor the first layer.
 
+## Platform notes
+
+The OrcaSlicer profiles directory is detected automatically per platform:
+
+| OS | Default path |
+|---|---|
+| macOS | `/Applications/OrcaSlicer.app/Contents/Resources/profiles/BBL` |
+| Linux | `~/.local/share/OrcaSlicer/system/BBL` |
+| Windows | `C:\Program Files\OrcaSlicer\resources\profiles\BBL` |
+
+If your install is in a non-standard location, set `ORCASLICER_PROFILES` in your `.env`:
+```
+ORCASLICER_PROFILES=/path/to/your/OrcaSlicer/profiles/BBL
+```
+
 ## Notes
 
 - The printer communicates over MQTT (port 8883, TLS) and FTPS (port 990). Both use Bambu's self-signed certificate, so TLS verification is disabled.

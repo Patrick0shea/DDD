@@ -1,9 +1,25 @@
 import sys
+import os
 import json
 import tempfile
 import zipfile
 import subprocess
 from pathlib import Path
+
+# OrcaSlicer profiles directory — override with ORCASLICER_PROFILES env var if needed.
+# Defaults work for a standard macOS install. Linux/Windows users should set the env var.
+#   macOS:   /Applications/OrcaSlicer.app/Contents/Resources/profiles/BBL
+#   Linux:   ~/.local/share/OrcaSlicer/system/BBL  (typical AppImage install)
+#   Windows: C:\Program Files\OrcaSlicer\resources\profiles\BBL
+_DEFAULT_PROFILES = {
+    "darwin":  "/Applications/OrcaSlicer.app/Contents/Resources/profiles/BBL",
+    "linux":   str(Path.home() / ".local/share/OrcaSlicer/system/BBL"),
+    "win32":   r"C:\Program Files\OrcaSlicer\resources\profiles\BBL",
+}
+ORCASLICER_PROFILES = Path(
+    os.environ.get("ORCASLICER_PROFILES") or
+    _DEFAULT_PROFILES.get(sys.platform, _DEFAULT_PROFILES["darwin"])
+)
 
 
 def compile_to_stl(scad_path: str) -> str:
@@ -31,7 +47,7 @@ def slice_to_gcode(stl_path: str) -> str:
     stl = Path(stl_path)
     gcode = stl.with_suffix(".gcode")
 
-    profiles_dir = Path("/Applications/OrcaSlicer.app/Contents/Resources/profiles/BBL")
+    profiles_dir = ORCASLICER_PROFILES
     process = profiles_dir / "process" / "0.20mm Standard @BBL A1M.json"
     filament = profiles_dir / "filament" / "Bambu PLA Basic @BBL A1M.json"
 
