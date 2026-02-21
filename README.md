@@ -86,20 +86,36 @@ python printer.py output/1234567890.gcode.3mf
 
 Since the backend must stay on your local network, the way to use it remotely is to expose your local server to the internet with a tunnel.
 
-**Cloudflare Tunnel** (recommended — free, permanent URL, no account port-forwarding):
-```bash
-# install: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
-cloudflared tunnel --url http://localhost:5000
-# gives you a stable https://xxx.trycloudflare.com URL
-```
+**Cloudflare Tunnel** (recommended — free, no account, no port forwarding, URL is stable per session):
 
-**ngrok** (simple, URL changes on each restart unless you pay):
+1. Install `cloudflared`:
+   ```bash
+   # macOS
+   brew install cloudflare/cloudflare/cloudflared
+
+   # or download directly:
+   # https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+   ```
+
+2. Start your server and the tunnel in two terminals:
+   ```bash
+   # terminal 1
+   python server.py
+
+   # terminal 2
+   cloudflared tunnel --url http://localhost:5000
+   ```
+
+3. Cloudflare prints a URL like `https://abc-def-123.trycloudflare.com` — open that on any device, anywhere.
+
+> The URL changes each time you restart the tunnel. If you want a permanent custom domain (e.g. `print.yourdomain.com`), create a free Cloudflare account and set up a named tunnel — [see the docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/).
+
+**ngrok** (alternative — simpler setup, URL changes on every restart on the free tier):
 ```bash
 ngrok http 5000
-# gives you https://abc123.ngrok.io
 ```
 
-Either way: `server.py` keeps running on your home machine next to the printer. The tunnel just gives you a public URL to reach it from your phone, laptop, wherever.
+Either way: `server.py` keeps running on your home machine next to the printer. The tunnel just gives you a public HTTPS URL to reach it from your phone, laptop, wherever.
 
 ## Output files
 
