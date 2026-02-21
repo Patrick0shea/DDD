@@ -9,15 +9,19 @@ Usage:
 Then open http://localhost:5000 in your browser.
 
 To expose publicly (e.g. for a Vercel-hosted frontend):
-    ngrok http 5000
+    cloudflared tunnel --url http://localhost:5000
 """
 import json
 import sys
 import os
+import threading
 from pathlib import Path
 from flask import Flask, request, Response, stream_with_context, send_from_directory
 
 app = Flask(__name__, static_folder=".")
+
+# Set when /api/abort is called — checked between pipeline stages
+_cancel = threading.Event()
 
 
 def _cors(resp: Response) -> Response:
@@ -51,12 +55,18 @@ def health():
 def abort_endpoint():
     if request.method == "OPTIONS":
         return _cors(Response())
+
+    # Signal the pipeline to stop between stages
+    _cancel.set()
+
+    # Also send MQTT stop to the printer (no-op if nothing is printing)
     try:
         from printer import cancel_print
         cancel_print()
-        return _cors(Response(json.dumps({"ok": True}), mimetype="application/json"))
     except Exception as e:
         return _cors(Response(json.dumps({"error": str(e)}), status=500, mimetype="application/json"))
+
+    return _cors(Response(json.dumps({"ok": True}), mimetype="application/json"))
 
 
 # ── Print pipeline ────────────────────────────────────────────────────────────
@@ -78,11 +88,16 @@ def print_endpoint():
         )
 
     def generate():
+        _cancel.clear()  # reset cancel flag at start of each job
+
         try:
             # ── Stage 1: Generate OpenSCAD ────────────────
             yield _sse({"stage": 0, "status": "active", "detail": "calling claude api..."})
             from ai_generator import generate_openscad
             scad_path = generate_openscad(prompt)
+            if _cancel.is_set():
+                yield _sse({"error": "aborted"})
+                return
             yield _sse({
                 "stage": 0, "status": "done",
                 "message": f"saved {Path(scad_path).name}",
@@ -93,6 +108,9 @@ def print_endpoint():
             yield _sse({"stage": 1, "status": "active", "detail": "running openscad cli..."})
             from slicer import compile_to_stl
             stl_path = compile_to_stl(scad_path)
+            if _cancel.is_set():
+                yield _sse({"error": "aborted"})
+                return
             yield _sse({
                 "stage": 1, "status": "done",
                 "message": f"saved {Path(stl_path).name}",
@@ -103,6 +121,9 @@ def print_endpoint():
             yield _sse({"stage": 2, "status": "active", "detail": "orca-slicer slicing..."})
             from slicer import slice_to_gcode
             gcode_path = slice_to_gcode(stl_path)
+            if _cancel.is_set():
+                yield _sse({"error": "aborted"})
+                return
             yield _sse({
                 "stage": 2, "status": "done",
                 "message": f"saved {Path(gcode_path).name}",
@@ -113,6 +134,9 @@ def print_endpoint():
             yield _sse({"stage": 3, "status": "active", "detail": "uploading over ftps..."})
             from printer import upload_and_print
             upload_and_print(gcode_path)
+            if _cancel.is_set():
+                yield _sse({"error": "aborted"})
+                return
             yield _sse({
                 "stage": 3, "status": "done",
                 "message": "print started",
