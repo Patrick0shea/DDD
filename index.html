@@ -495,19 +495,9 @@
   </div>
 
   <script>
-    // ── CONFIG ──────────────────────────────────────────
-    // To connect the real backend, set MOCK = false and
-    // point API_BASE at your Flask/FastAPI server.
-    //
-    // Expected endpoints:
-    //   POST /api/print  { prompt }  → starts job, streams SSE
-    //   GET  /api/stream             → SSE: { stage, status, message, detail }
-    //
-    const MOCK = true;
-    const API_BASE = '';
-
-    // ── STATE ────────────────────────────────────────────
-    let running = false;
+      // ── STATE ────────────────────────────────────────────
+    let running  = false;
+    let useMock  = true;   // flipped to false if server.py is detected
 
     // ── DOM ──────────────────────────────────────────────
     const promptEl  = document.getElementById('prompt');
@@ -524,26 +514,24 @@
     ];
 
     // ── LOGGING ──────────────────────────────────────────
-    function ts() {
-      const d = new Date();
-      return d.toTimeString().slice(0,8);
-    }
+    function ts() { return new Date().toTimeString().slice(0, 8); }
 
     function log(msg, type = '') {
       const entry = document.createElement('div');
       entry.className = 'log-entry';
-      entry.innerHTML = `<span class="log-ts">${ts()}</span><span class="log-msg ${type}">${msg}</span>`;
+      entry.innerHTML =
+        `<span class="log-ts">${ts()}</span><span class="log-msg ${type}">${msg}</span>`;
       logBox.appendChild(entry);
       logBox.scrollTop = logBox.scrollHeight;
     }
 
     // ── PIPELINE STAGE UI ────────────────────────────────
     function setStage(idx, state, badgeText, detailText) {
-      const s = STAGES[idx];
+      const s     = STAGES[idx];
       const el    = document.getElementById(s.id);
       const badge = document.getElementById(s.badge);
       const det   = document.getElementById(s.detail);
-      el.className    = `stage ${state}`;
+      el.className      = `stage ${state}`;
       badge.textContent = badgeText;
       det.textContent   = detailText || '—';
     }
@@ -558,49 +546,98 @@
       statusTxt.textContent = text;
     }
 
+    // ── REAL PIPELINE (server.py) ─────────────────────────
+    async function runRealPipeline(prompt) {
+      log(`> ${prompt}`, 'info');
+      log('pipeline starting...', 'system');
+
+      const resp = await fetch('/api/print', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ prompt }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: resp.statusText }));
+        throw new Error(err.error || resp.statusText);
+      }
+
+      const reader  = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let   buf     = '';
+
+      while (running) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop(); // keep incomplete last line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let data;
+          try { data = JSON.parse(line.slice(6)); } catch { continue; }
+
+          if (data.error) {
+            log(data.error, 'error');
+            STAGES.forEach((_, i) => {
+              const el = document.getElementById(STAGES[i].id);
+              if (el.classList.contains('active')) setStage(i, 'error', 'ERROR', data.error);
+            });
+            setStatus('error', 'ERROR');
+            return;
+          }
+
+          if (data.done) {
+            log('pipeline complete.', 'success');
+            setStatus('', 'COMPLETE');
+            return;
+          }
+
+          const { stage, status, message, detail } = data;
+          if (status === 'active') {
+            setStage(stage, 'active', 'RUNNING', detail);
+            setStatus('busy', `STAGE ${stage + 1}/4`);
+          } else if (status === 'done') {
+            setStage(stage, 'done', 'DONE', detail);
+            if (message) log(message, 'success');
+          }
+        }
+      }
+    }
+
     // ── MOCK PIPELINE ────────────────────────────────────
     const MOCK_STAGES = [
       {
-        name: 'GENERATE OPENSCAD',
-        duration: 3200,
-        detail: 'calling claude api...',
-        doneDetail: 'output/1234567890.scad',
+        duration: 3200, detail: 'calling claude api...', doneDetail: 'output/1234567890.scad',
         logs: [
           [0,    'info',    'sending prompt to claude...'],
           [800,  '',        'model: claude-sonnet-4-6'],
           [2800, '',        'received 847 tokens'],
           [3100, 'success', 'openscad written to disk'],
-        ]
+        ],
       },
       {
-        name: 'COMPILE STL',
-        duration: 2400,
-        detail: 'running openscad cli...',
-        doneDetail: 'output/1234567890.stl',
+        duration: 2400, detail: 'running openscad cli...', doneDetail: 'output/1234567890.stl',
         logs: [
           [0,    'info',    'spawning openscad process...'],
           [1200, '',        'geometry compiled: 2,304 faces'],
           [2300, 'success', 'stl written to disk'],
-        ]
+        ],
       },
       {
-        name: 'SLICE GCODE',
-        duration: 3800,
-        detail: 'orca-slicer slicing...',
-        doneDetail: 'output/1234567890.gcode.3mf',
+        duration: 3800, detail: 'orca-slicer slicing...', doneDetail: 'output/1234567890.gcode.3mf',
         logs: [
           [0,    'info',    'loading bambu a1 mini profiles...'],
           [400,  '',        'patching machine profile: g92 e0'],
           [600,  '',        'patching process profile: brim 5mm'],
           [2200, '',        'slicing 42 layers...'],
           [3600, 'success', 'gcode + 3mf written to disk'],
-        ]
+        ],
       },
       {
-        name: 'TRANSMIT + PRINT',
-        duration: 4000,
-        detail: 'uploading over ftps...',
-        doneDetail: 'printing in progress',
+        duration: 4000, detail: 'uploading over ftps...', doneDetail: 'printing in progress',
         logs: [
           [0,    'info',    'connecting to printer via ftps:990...'],
           [800,  '',        'uploading gcode.3mf...'],
@@ -608,7 +645,7 @@
           [2100, 'info',    'sending print command via mqtt:8883...'],
           [3000, '',        'printer acknowledged'],
           [3800, 'success', 'print started'],
-        ]
+        ],
       },
     ];
 
@@ -616,23 +653,18 @@
 
     async function runMockPipeline(prompt) {
       log(`> ${prompt}`, 'info');
-      log('pipeline starting...', 'system');
+      log('demo mode — run server.py to print for real.', 'system');
 
       for (let i = 0; i < MOCK_STAGES.length; i++) {
         if (!running) break;
-
         const s = MOCK_STAGES[i];
         setStage(i, 'active', 'RUNNING', s.detail);
-        setStatus('busy', `STAGE ${i+1}/4`);
-
-        // schedule log lines
+        setStatus('busy', `STAGE ${i + 1}/4`);
         s.logs.forEach(([delay, type, msg]) => {
           setTimeout(() => { if (running) log(msg, type); }, delay);
         });
-
         await sleep(s.duration);
         if (!running) break;
-
         setStage(i, 'done', 'DONE', s.doneDetail);
       }
 
@@ -645,26 +677,6 @@
       }
     }
 
-    // ── REAL PIPELINE (SSE) ──────────────────────────────
-    // Uncomment and adapt when backend is ready.
-    //
-    // async function runRealPipeline(prompt) {
-    //   await fetch(`${API_BASE}/api/print`, {
-    //     method: 'POST',
-    //     headers: { 'Content-Type': 'application/json' },
-    //     body: JSON.stringify({ prompt }),
-    //   });
-    //
-    //   const es = new EventSource(`${API_BASE}/api/stream`);
-    //   es.onmessage = (e) => {
-    //     const { stage, status, message, detail } = JSON.parse(e.data);
-    //     setStage(stage, status, status.toUpperCase(), detail);
-    //     if (message) log(message, status === 'error' ? 'error' : '');
-    //     if (status === 'done' && stage === 3) { es.close(); finish(); }
-    //     if (status === 'error')               { es.close(); abort(); }
-    //   };
-    // }
-
     // ── EXECUTE / ABORT ──────────────────────────────────
     async function execute() {
       const prompt = promptEl.value.trim();
@@ -674,22 +686,20 @@
       promptEl.disabled = true;
       execBtn.textContent = 'ABORT';
       execBtn.classList.add('abort');
-      execBtn.disabled = false;
-
       resetPipeline();
 
-      if (MOCK) {
-        await runMockPipeline(prompt);
-      } else {
-        // await runRealPipeline(prompt);
+      try {
+        if (useMock) await runMockPipeline(prompt);
+        else         await runRealPipeline(prompt);
+      } catch (e) {
+        log(e.message, 'error');
+        setStatus('error', 'ERROR');
       }
 
       finish();
     }
 
-    function abort() {
-      running = false;
-    }
+    function abort()  { running = false; }
 
     function finish() {
       running = false;
@@ -700,18 +710,29 @@
     }
 
     // ── EVENTS ───────────────────────────────────────────
-    execBtn.addEventListener('click', () => {
-      if (running) abort();
-      else execute();
-    });
+    execBtn.addEventListener('click', () => { if (running) abort(); else execute(); });
+    promptEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !running) execute(); });
 
-    promptEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !running) execute();
-    });
+    // ── AUTO-DETECT BACKEND ───────────────────────────────
+    // Pings /api/health. If server.py is running, switches to real mode automatically.
+    async function detectBackend() {
+      try {
+        const resp = await fetch('/api/health', { signal: AbortSignal.timeout(1000) });
+        if (resp.ok) {
+          useMock = false;
+          setStatus('', 'READY');
+          log('server connected — prints will run for real.', 'success');
+          return;
+        }
+      } catch {}
+      // No backend — stay in mock mode
+      setStatus('', 'DEMO MODE');
+      log('no server detected — running in demo mode.', 'system');
+      log('run  python server.py  to enable real printing.', 'system');
+    }
 
     // ── INIT ─────────────────────────────────────────────
-    log('system ready.', 'system');
-    log('enter a prompt and press execute.', 'system');
+    detectBackend();
     promptEl.focus();
   </script>
 </body>
