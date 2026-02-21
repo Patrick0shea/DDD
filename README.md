@@ -93,7 +93,12 @@ Since the backend must stay on your local network, the way to use it remotely is
    # macOS
    brew install cloudflare/cloudflare/cloudflared
 
-   # or download directly:
+   # Linux
+   wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+   sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
+   sudo chmod +x /usr/local/bin/cloudflared
+
+   # Windows — download the installer:
    # https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
    ```
 
