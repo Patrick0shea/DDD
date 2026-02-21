@@ -60,6 +60,34 @@ def _ftp_upload(gcode_path: str) -> str:
     return remote_name
 
 
+def cancel_print():
+    """Send a stop command to the printer over MQTT."""
+    command = {
+        "print": {
+            "command": "stop",
+            "sequence_id": str(int(time.time())),
+            "param": "",
+        },
+        "user_id": "0",
+        "sequence_id": str(int(time.time())),
+    }
+    topic_request = f"device/{config.BAMBU_SERIAL}/request"
+
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client.username_pw_set("bblp", config.BAMBU_ACCESS_CODE)
+    client.tls_set(cert_reqs=ssl.CERT_NONE)
+    client.tls_insecure_set(True)
+
+    client.connect(config.BAMBU_IP, MQTT_PORT, keepalive=60)
+    client.loop_start()
+    time.sleep(1)
+    result = client.publish(topic_request, json.dumps(command), qos=1)
+    result.wait_for_publish(timeout=5)
+    client.loop_stop()
+    client.disconnect()
+    print("    Cancel command sent to printer")
+
+
 def _build_print_command(remote_filename: str, subtask_name: str = "ai_print") -> dict:
     return {
         "print": {

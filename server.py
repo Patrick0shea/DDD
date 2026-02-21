@@ -45,6 +45,20 @@ def health():
     return _cors(Response(json.dumps({"ok": True}), mimetype="application/json"))
 
 
+# ── Abort ─────────────────────────────────────────────────────────────────────
+
+@app.route("/api/abort", methods=["POST", "OPTIONS"])
+def abort_endpoint():
+    if request.method == "OPTIONS":
+        return _cors(Response())
+    try:
+        from printer import cancel_print
+        cancel_print()
+        return _cors(Response(json.dumps({"ok": True}), mimetype="application/json"))
+    except Exception as e:
+        return _cors(Response(json.dumps({"error": str(e)}), status=500, mimetype="application/json"))
+
+
 # ── Print pipeline ────────────────────────────────────────────────────────────
 
 @app.route("/api/print", methods=["POST", "OPTIONS"])

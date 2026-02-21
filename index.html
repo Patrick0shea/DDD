@@ -699,7 +699,14 @@
       finish();
     }
 
-    function abort()  { running = false; }
+    function abort() {
+      running = false;
+      if (!useMock) {
+        fetch('/api/abort', { method: 'POST' })
+          .then(() => log('cancel command sent to printer.', 'info'))
+          .catch(() => log('abort request failed — stop the print manually on the printer.', 'error'));
+      }
+    }
 
     function finish() {
       running = false;
