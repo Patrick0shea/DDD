@@ -1,8 +1,24 @@
-# Autonomous 3D Printing Pipeline
+# DDD — Describe. Design. Deliver.
 
 Give Claude a text prompt → get a physical print on your Bambu Lab A1 Mini.
 
 **Pipeline:** Prompt → Claude generates OpenSCAD → compiled to STL → sliced to G-code → uploaded to printer → print starts.
+
+## How it works
+
+The backend (`server.py`) must run on a machine **on the same local network as your printer**. This is unavoidable — the printer only accepts connections over LAN.
+
+```
+Your browser
+    │  HTTP
+    ▼
+server.py  (your machine, same network as printer)
+    │  FTPS / MQTT
+    ▼
+Bambu Lab A1 Mini
+```
+
+Opening `index.html` directly in a browser shows a **demo mode** with a simulated pipeline — no backend or printer needed. To run real prints, start `server.py` first.
 
 ## Prerequisites
 
@@ -45,28 +61,45 @@ BAMBU_ACCESS_CODE=12345678
 
 > **LAN Mode**: The printer must have LAN Mode enabled. On the touchscreen go to Settings → Network → LAN Mode and toggle it on.
 
-## Usage
+## Running locally
+
+```bash
+python server.py
+# open http://localhost:5000
+```
+
+The frontend auto-detects the backend. Status dot turns green when connected.
+
+### CLI usage (no web UI)
 
 ```bash
 # Full pipeline
 python main.py "a 30mm solid cylinder with a 5mm hole through the center"
 
-# Or run interactively
-python main.py
-```
-
-### Test individual stages
-
-```bash
-# Test AI generation only
+# Test individual stages
 python ai_generator.py "a 20mm calibration cube"
-
-# Test slicing only (given a .scad file)
 python slicer.py output/1234567890.scad
-
-# Test printer upload only (given a .gcode.3mf file)
 python printer.py output/1234567890.gcode.3mf
 ```
+
+## Using from anywhere (remote access)
+
+Since the backend must stay on your local network, the way to use it remotely is to expose your local server to the internet with a tunnel.
+
+**Cloudflare Tunnel** (recommended — free, permanent URL, no account port-forwarding):
+```bash
+# install: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+cloudflared tunnel --url http://localhost:5000
+# gives you a stable https://xxx.trycloudflare.com URL
+```
+
+**ngrok** (simple, URL changes on each restart unless you pay):
+```bash
+ngrok http 5000
+# gives you https://abc123.ngrok.io
+```
+
+Either way: `server.py` keeps running on your home machine next to the printer. The tunnel just gives you a public URL to reach it from your phone, laptop, wherever.
 
 ## Output files
 
@@ -94,7 +127,7 @@ Three modes are defined in `skill/`:
 | `RESPOND.md` | **Response** — Claude makes something *about* an idea, a conversation, or something in the world. Not a self-portrait but a physical argument. |
 | `SERIES.md` | **Series** — Claude builds a body of work across multiple prints, holding a shared constraint and learning from each iteration. |
 
-These skills are loaded automatically by Claude Code when the relevant prompt is used. The `skill/` directory follows the [Claude Code skills spec](https://docs.anthropic.com/en/docs/claude-code/skills).
+These skills are loaded automatically by Claude Code when the relevant prompt is used.
 
 ## Print quality
 
