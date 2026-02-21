@@ -76,6 +76,26 @@ All generated files are saved to `./output/`:
 - `{timestamp}.gcode` — sliced G-code
 - `{timestamp}.gcode.3mf` — G-code wrapped in 3MF format (required by Bambu printers)
 
+## Let Claude decide what to print
+
+The pipeline includes a set of Claude Code skills that give your agent creative autonomy — the same idea as [Claude making its own drawings](https://www.anthropic.com/news/claude-draws), but in physical plastic.
+
+Give Claude access to a printer and step back:
+
+```
+"You have access to a 3D printer. Make something that represents you."
+```
+
+Three modes are defined in `skill/`:
+
+| Skill | What it does |
+|---|---|
+| `SKILL.md` | **Self-portrait** — Claude reflects on its own nature and externalises it as an object. It thinks before coding, signs the work, and iterates from your photos of the print. |
+| `RESPOND.md` | **Response** — Claude makes something *about* an idea, a conversation, or something in the world. Not a self-portrait but a physical argument. |
+| `SERIES.md` | **Series** — Claude builds a body of work across multiple prints, holding a shared constraint and learning from each iteration. |
+
+These skills are loaded automatically by Claude Code when the relevant prompt is used. The `skill/` directory follows the [Claude Code skills spec](https://docs.anthropic.com/en/docs/claude-code/skills).
+
 ## Print quality
 
 The AI is prompted to generate FDM-friendly geometry:
