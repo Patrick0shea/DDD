@@ -68,6 +68,12 @@ python server.py
 # open http://localhost:5000
 ```
 
+> **macOS: port 5000 already in use?** AirPlay Receiver occupies port 5000 by default. Either disable it in System Settings → General → AirDrop & Handoff → AirPlay Receiver, or run on a different port:
+> ```bash
+> PORT=8080 python server.py
+> # open http://localhost:8080
+> ```
+
 The frontend auto-detects the backend. Status dot turns green when connected.
 
 ### CLI usage (no web UI)
@@ -105,10 +111,10 @@ Since the backend must stay on your local network, the way to use it remotely is
 2. Start your server and the tunnel in two terminals:
    ```bash
    # terminal 1
-   python server.py
+   python server.py          # or: PORT=8080 python server.py
 
    # terminal 2
-   cloudflared tunnel --url http://localhost:5000
+   cloudflared tunnel --url http://localhost:5000   # match the port above
    ```
 
 3. Cloudflare prints a URL like `https://abc-def-123.trycloudflare.com` — open that on any device, anywhere.
